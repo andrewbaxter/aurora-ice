@@ -14,11 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: python3 ./build.py
+      - run: python3 ./pack.py
       - id: pages
         uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: ./build
+          path: ./package
       - id: deployment
         uses: actions/deploy-pages@v4
