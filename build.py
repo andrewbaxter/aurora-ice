@@ -1,7 +1,7 @@
 import pathlib
 import json
 
-here = pathlib.cwd()
+here = pathlib.Path.cwd()
 out = here / "build"
 out.mkdir(exist_ok=True, parents=True)
 source = (here / "index.html").read_text()
