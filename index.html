@@ -69,7 +69,12 @@ For submission to the Kitte Osaka Axcross 2025 open call
           const s = gl.createShader(type);
           const source = await (async () => {
             try {
-              return await (await fetch(name)).text();
+              const resp = await fetch(name);
+              const text = await resp.text();
+              if (!resp.ok) {
+                throw new Error(text);
+              }
+              return text;
             } catch (e) {
               console.log(`Error fetching source ${name}: `, e);
               return backupShaders[name];
