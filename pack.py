@@ -2,7 +2,7 @@ import pathlib
 import json
 
 here = pathlib.Path.cwd()
-out = here / "pack"
+out = here / "package"
 out.mkdir(exist_ok=True, parents=True)
 source = (here / "index.html").read_text()
 shaders = {}
