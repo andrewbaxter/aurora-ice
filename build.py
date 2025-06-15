@@ -8,4 +8,4 @@ source = (here / "index.html").read_text()
 shaders = {}
 for shader in list(here.glob("*.frag")) + list(here.glob("*.vert")):
     shaders[shader.name] = shader.read_text()
-(out / "index.html").write_text(source.replace("BACKUP_SHADERS", json.dumps(shaders)))
+(out / "index.html").write_text(source.replace('"BACKUP_SHADERS"', json.dumps(shaders)))
