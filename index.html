@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<!--
+(c) 2025 - Andrew Baxter
+For submission to the Kitte Osaka Axcross 2025 open call
+-->
+<html lang="en">
+  <head>
+    <title>オーロラ氷</title>
+    <style>
+      html {
+        background-color: black;
+      }
+      * {
+        box-sizing: border-box;
+        width: 100dvw;
+        border: none;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+      canvas {
+        aspect-ratio: 8950 / 1080;
+      }
+    </style>
+    <script>
+      window.addEventListener("DOMContentLoaded", async (_) => {
+        let glassVisibleMin = 0;
+        let glassRadius2 = 0.8;
+        let glassVisible = 0;
+        const modeInput = Math.random();
+        if (modeInput < 0.4) {
+          //glassVisible = 1;
+          if (modeInput < 0.5) {
+            glassVisible = 1;
+            glassRadius2 = 5.8;
+            if (modeInput < 0.2) {
+              glassVisibleMin = 0.8;
+            }
+          }
+        }
+        // Sqrt of above max must be less than this; this affects density too
+        const radiusMax = 6;
+
+        const canvas = document.getElementsByTagName("canvas").item(0);
+
+        const gl = canvas.getContext("webgl2", { antialias: true });
+        gl.enable(gl.DEPTH_TEST);
+        gl.getExtension("OES_texture_float");
+        gl.getExtension("EXT_color_buffer_float");
+        gl.clearColor(0, 0, 0, 1);
+
+        // # Helper methods
+        const getAttribLocation = (p, k) => {
+          const out = gl.getAttribLocation(p[0], k);
+          if (out == -1) {
+            throw new Error(`Missing attribute ${k} in program ${p[1]}`);
+          }
+          return out;
+        };
+        const getUniformLocation = (p, k) => {
+          const out = gl.getUniformLocation(p[0], k);
+          if (out == -1) {
+            throw new Error(`Missing uniform ${k} in program ${p[1]}`);
+          }
+          return out;
+        };
+        const backupShaders = "BACKUP_SHADERS";
+        const createShader = async (name, type) => {
+          const s = gl.createShader(type);
+          const source = await (async () => {
+            try {
+              return await (await fetch(name)).text();
+            } catch (e) {
+              console.log(`Error fetching source ${name}: `, e);
+              return backupShaders[name];
+            }
+          })();
+          gl.shaderSource(s, source);
+          gl.compileShader(s);
+          if (gl.getShaderParameter(s, gl.COMPILE_STATUS) == null) {
+            throw Error(gl.getShaderInfoLog(s));
+          }
+          return s;
+        };
+        const createProg = async (hint, shaders) => {
+          const p = gl.createProgram();
+          for (const s of shaders) {
+            gl.attachShader(p, s);
+          }
+          gl.linkProgram(p);
+          if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+            const shaderLogs = [];
+            for (let i = 0; i < shaders.length; i += 1) {
+              shaderLogs.push(
+                `* Shader ${i}: ${gl.getShaderInfoLog(shaders[i])}`
+              );
+            }
+            throw Error(
+              `Failed to create program [${hint}]:\n${gl.getProgramInfoLog(
+                p
+              )}\n${shaderLogs.join("\n")}`
+            );
+          }
+          /*
+          const uniformCount = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+          for (let i = 0; i < uniformCount; ++i) {
+            console.log(
+              `${hint} uniform ${i}: ${gl.getActiveUniform(p, i).name}`
+            );
+          }
+          const attributeCount = gl.getProgramParameter(
+            p,
+            gl.ACTIVE_ATTRIBUTES
+          );
+          for (let i = 0; i < attributeCount; ++i) {
+            console.log(
+              `${hint} attribute ${i}: ${gl.getActiveAttrib(p, i).name}`
+            );
+          }
+          */
+          return [p, hint];
+        };
+
+        // # Glass shader setup
+        const p1 = await createProg("p1", [
+          await createShader("glass.vert", gl.VERTEX_SHADER),
+          await createShader("glass.frag", gl.FRAGMENT_SHADER),
+        ]);
+        const p1UniformReso = getUniformLocation(p1, "in_reso");
+        gl.useProgram(p1[0]);
+        gl.uniform1f(getUniformLocation(p1, "in_glass_max_radius"), 6);
+
+        // # Main shader setup
+        const pm = await createProg("pm", [
+          await createShader("main.vert", gl.VERTEX_SHADER),
+          await createShader("main.frag", gl.FRAGMENT_SHADER),
+        ]);
+        const pmUniformReso = getUniformLocation(pm, "in_reso");
+        gl.useProgram(pm[0]);
+        gl.uniform1f(getUniformLocation(pm, "in_glass_visible"), glassVisible);
+        gl.uniform1f(
+          getUniformLocation(pm, "in_glass_visible_min"),
+          glassVisibleMin
+        );
+
+        // # Setup uniforms common to both shaders
+        for (const p of [pm, p1]) {
+          gl.useProgram(p[0]);
+          gl.uniform1f(getUniformLocation(p, "in_view_height_logical"), 6);
+        }
+
+        // # Geom setup
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array([
+            // Bottom left
+            -1, -1,
+            // Bottom right
+            1, -1,
+            // Top left
+            1, 1,
+            // Top right
+            -1, 1,
+          ]),
+          gl.STATIC_DRAW
+        );
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+        const quadVertIndices = [0, 1, 2, 0, 2, 3];
+        gl.bufferData(
+          gl.ELEMENT_ARRAY_BUFFER,
+          new Uint16Array(quadVertIndices),
+          gl.STATIC_DRAW
+        );
+        for (const p of [pm, p1]) {
+          gl.useProgram(p[0]);
+          const inVertLoc = getAttribLocation(p, "in_vert");
+          gl.enableVertexAttribArray(inVertLoc);
+          gl.vertexAttribPointer(inVertLoc, 2, gl.FLOAT, false, 0, 0);
+        }
+
+        // # Glass setup
+        const instCount = 200;
+        const p1AttrStart = [];
+        const p1AttrVel = [];
+        const p1AttrRadius = [];
+        for (let i = 0; i < instCount; i += 1) {
+          p1AttrStart.push(Math.random());
+          p1AttrStart.push(Math.random());
+          p1AttrVel.push(Math.random());
+          p1AttrVel.push(Math.random());
+          p1AttrRadius.push(glassRadius2);
+        }
+
+        gl.useProgram(p1[0]);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array(p1AttrStart),
+          gl.STATIC_DRAW
+        );
+        const p1AttrStartLoc = getAttribLocation(p1, "in_start");
+        gl.enableVertexAttribArray(p1AttrStartLoc);
+        gl.vertexAttribPointer(p1AttrStartLoc, 2, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribDivisor(p1AttrStartLoc, 1);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array(p1AttrVel),
+          gl.STATIC_DRAW
+        );
+        const p1AttrVelLoc = getAttribLocation(p1, "in_vel");
+        gl.enableVertexAttribArray(p1AttrVelLoc);
+        gl.vertexAttribPointer(p1AttrVelLoc, 2, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribDivisor(p1AttrVelLoc, 1);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array(p1AttrRadius),
+          gl.STATIC_DRAW
+        );
+        const p1AttrRadiusLoc = getAttribLocation(p1, "in_radius2");
+        gl.enableVertexAttribArray(p1AttrRadiusLoc);
+        gl.vertexAttribPointer(p1AttrRadiusLoc, 1, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribDivisor(p1AttrRadiusLoc, 1);
+
+        // # Set up sizing refresh, run initially
+        const unitP1Out = 0;
+        const unitP1Depth = 1;
+        let p1Out = null;
+        let p1Depth = null;
+        let p1Fb = null;
+        const resize = () => {
+          const box = canvas.getBoundingClientRect();
+
+          canvas.width = box.width;
+          canvas.height = box.height;
+
+          gl.viewport(0, 0, canvas.width, canvas.height);
+
+          gl.useProgram(p1[0]);
+          gl.uniform2f(p1UniformReso, box.width, box.height);
+
+          gl.useProgram(pm[0]);
+          gl.uniform2f(pmUniformReso, box.width, box.height);
+
+          // ## Create/recreate fb for p1
+          if (p1Out != null) {
+            gl.deleteTexture(p1Out);
+          }
+          if (p1Depth != null) {
+            gl.deleteTexture(p1Depth);
+          }
+          if (p1Fb != null) {
+            gl.deleteFramebuffer(p1Fb);
+          }
+          p1Fb = gl.createFramebuffer();
+          gl.bindFramebuffer(gl.FRAMEBUFFER, p1Fb);
+
+          p1Out = gl.createTexture();
+          gl.activeTexture(gl.TEXTURE0 + unitP1Out);
+          gl.bindTexture(gl.TEXTURE_2D, p1Out);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA32F,
+            box.width,
+            box.height,
+            0,
+            gl.RGBA,
+            gl.FLOAT,
+            null
+          );
+          gl.framebufferTexture2D(
+            gl.FRAMEBUFFER,
+            gl.COLOR_ATTACHMENT0,
+            gl.TEXTURE_2D,
+            p1Out,
+            0
+          );
+
+          p1Depth = gl.createTexture();
+          gl.activeTexture(gl.TEXTURE0 + unitP1Depth);
+          gl.bindTexture(gl.TEXTURE_2D, p1Depth);
+          gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.DEPTH_COMPONENT24,
+            box.width,
+            box.height,
+            0,
+            gl.DEPTH_COMPONENT,
+            gl.UNSIGNED_INT,
+            null
+          );
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.framebufferTexture2D(
+            gl.FRAMEBUFFER,
+            gl.DEPTH_ATTACHMENT,
+            gl.TEXTURE_2D,
+            p1Depth,
+            0
+          );
+        };
+        resize();
+        gl.useProgram(pm[0]);
+        gl.uniform1i(getUniformLocation(pm, "in_tex_glass"), unitP1Out);
+        window.onresize = resize;
+
+        // # Start frame handling
+        const quadVertIndexCount = quadVertIndices.length;
+        const p1UniformTime = getUniformLocation(p1, "in_time");
+        const pmUniformTime = getUniformLocation(pm, "in_time");
+        const timeOffset = Math.random() * 2000 - 1000;
+        const frame = (timeMs) => {
+          const absTime = timeOffset + timeMs / 1000.0;
+
+          // ## 1st pass, glass
+          gl.bindFramebuffer(gl.FRAMEBUFFER, p1Fb);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+          gl.useProgram(p1[0]);
+          gl.uniform1f(p1UniformTime, absTime);
+          gl.drawElementsInstanced(
+            gl.TRIANGLES,
+            quadVertIndexCount,
+            gl.UNSIGNED_SHORT,
+            0,
+            instCount
+          );
+
+          // ## 2nd pass, flames, composition
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+          gl.useProgram(pm[0]);
+          gl.uniform1f(pmUniformTime, absTime);
+          gl.drawElements(
+            gl.TRIANGLES,
+            quadVertIndexCount,
+            gl.UNSIGNED_SHORT,
+            0
+          );
+
+          // # Repeat
+          requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+      });
+    </script>
+  </head>
+  <body>
+    <canvas></canvas>
+  </body>
+</html>
