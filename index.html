@@ -28,16 +28,17 @@ For submission to the Kitte Osaka Axcross 2025 open call
         let glassRadius2 = 0.8;
         let glassVisible = 0;
         const modeInput = Math.random();
+        console.log(`Mode selection ${modeInput}`);
+        //if (modeInput < 0.4) {
+        //glassVisible = 1;
         if (modeInput < 0.4) {
-          //glassVisible = 1;
-          if (modeInput < 0.5) {
-            glassVisible = 1;
-            glassRadius2 = 5.8;
-            if (modeInput < 0.2) {
-              glassVisibleMin = 0.8;
-            }
+          glassVisible = 1;
+          glassRadius2 = 5.8;
+          if (modeInput < 0.15) {
+            glassVisibleMin = 0.8;
           }
         }
+        //}
         // Sqrt of above max must be less than this; this affects density too
         const radiusMax = 6;
 
@@ -68,13 +69,11 @@ For submission to the Kitte Osaka Axcross 2025 open call
         const createShader = async (name, type) => {
           const s = gl.createShader(type);
           const source = await (async () => {
-            const resp = await fetch(name);
-            const text = await resp.text();
-            if (resp.ok) {
-              return text;
-            } else {
-              return backupShaders[name];
+            let source = backupShaders[name];
+            if (source != null && source != "") {
+              return source;
             }
+            return await (await fetch(name)).text();
           })();
           gl.shaderSource(s, source);
           gl.compileShader(s);
