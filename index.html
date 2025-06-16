@@ -13,6 +13,7 @@ For submission to the Kitte Osaka Axcross 2025 open call
       * {
         box-sizing: border-box;
         width: 100dvw;
+        height: 100dvh;
         border: none;
         padding: 0;
         margin: 0;
@@ -20,10 +21,18 @@ For submission to the Kitte Osaka Axcross 2025 open call
       }
       canvas {
         aspect-ratio: 8950 / 1080;
+        height: auto;
       }
     </style>
     <script>
       window.addEventListener("DOMContentLoaded", async (_) => {
+        const canvas = document.getElementsByTagName("canvas").item(0);
+
+        if (window.location.hash == "#full") {
+          canvas.style.aspectRatio = "initial";
+          canvas.style.height = "100%";
+        }
+
         let glassVisibleMin = 0;
         let glassRadius2 = 0.8;
         let glassVisible = 0;
@@ -41,8 +50,6 @@ For submission to the Kitte Osaka Axcross 2025 open call
         //}
         // Sqrt of above max must be less than this; this affects density too
         const radiusMax = 6;
-
-        const canvas = document.getElementsByTagName("canvas").item(0);
 
         const gl = canvas.getContext("webgl2", { antialias: true });
         gl.enable(gl.DEPTH_TEST);
@@ -69,9 +76,11 @@ For submission to the Kitte Osaka Axcross 2025 open call
         const createShader = async (name, type) => {
           const s = gl.createShader(type);
           const source = await (async () => {
-            let source = backupShaders[name];
-            if (source != null && source != "") {
-              return source;
+            if (typeof backupShaders != "string") {
+              let source = backupShaders[name];
+              if (source != null && source != "") {
+                return source;
+              }
             }
             return await (await fetch(name)).text();
           })();
